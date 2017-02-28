@@ -1,10 +1,9 @@
 import typeorm from 'typeorm';
 import DataLoader from 'dataloader';
-import {groupBy, property, values, clone, isEmpty} from 'ramda';
-import {stringifyValue, stringifyObject, getCacheKey} from './utils';
+import {groupBy, property, isEmpty} from 'ramda';
+import {getCacheKey, mergeWhere} from './utils';
 import shimmer from 'shimmer';
 import LRU from 'lru-cache';
-// import assert from 'assert';
 
 function mapResult(attribute, keys, options, result) {
   // Convert an array of results to an object of attribute (primary / foreign / target key) -> array of matching rows
@@ -48,51 +47,11 @@ function rejectOnEmpty(options, result) {
     } else if (typeof options.rejectOnEmpty === 'object') {
       throw options.rejectOnEmpty;
     } else {
-      throw new Sequelize.EmptyResultError();
+      throw new typeorm.EmptyResultError();
     }
   }
 
   return result;
-}
-
-function loaderForBTM(model, joinTableName, foreignKey, foreignKeyField, options = {}) {
-  assert(options.include === undefined, 'options.include is not supported by model loader');
-  assert(options.association !== undefined, 'options.association should be set for BTM loader');
-
-  let attributes = [joinTableName, foreignKey]
-    , cacheKey = getCacheKey(model, attributes, options)
-    , association = options.association;
-  delete options.association;
-
-  if (!cache.has(cacheKey)) {
-    cache.set(cacheKey, new DataLoader(keys => {
-      let findOptions = Object.assign({}, options);
-      delete findOptions.rejectOnEmpty;
-      if (findOptions.limit) {
-        findOptions.groupedLimit = {
-          through: options.through,
-          on: association,
-          limit: findOptions.limit,
-          values: keys
-        };
-      } else {
-        findOptions.include = [{
-          attributes: [foreignKey],
-          association: association.manyFromSource,
-          where: {
-            [foreignKeyField]: keys,
-            ...options.through.where
-          }
-        }];
-      }
-
-      return model.findAll(findOptions).then(mapResult.bind(null, attributes, keys, findOptions));
-    }, {
-      cache: false
-    }));
-  }
-
-  return cache.get(cacheKey);
 }
 
 function loaderForModel(model, attribute, attributeField, options = {}) {
@@ -137,169 +96,12 @@ function shimModel(target) {
       if ([null, undefined].indexOf(id) !== -1) {
         return Promise.resolve(null);
       }
-      /*
       if (options.transaction || options.include) {
         return original.apply(this, arguments);
       }
       return loaderForModel(this, this.primaryKeyAttribute, this.primaryKeyField).load(id).then(rejectOnEmpty.bind(null, options));
-      */
     };
   });
-}
-
-function shimBelongsTo(target) {
-  if (target.get.__wrapped) return;
-
-  shimmer.wrap(target, 'get', original => {
-    return function batchedGetBelongsTo(instance, options = {}) {
-      if (Array.isArray(instance) || options.include || options.transaction) {
-        return original.apply(this, arguments);
-      }
-
-      let foreignKeyValue = instance.get(this.foreignKey);
-      return Promise.resolve().then(() => {
-        if (foreignKeyValue === undefined || foreignKeyValue === null) {
-          return Promise.resolve(null);
-        }
-        let loader = loaderForModel(this.target, this.targetKey, this.targetKeyField, options);
-        return loader.load(foreignKeyValue);
-      }).then(rejectOnEmpty.bind(null, options));
-    };
-  });
-}
-
-function shimHasOne(target) {
-  if (target.get.__wrapped) return;
-
-  shimmer.wrap(target, 'get', original => {
-    return function batchedGetHasOne(instance, options = {}) {
-      if (Array.isArray(instance) || options.include || options.transaction) {
-        return original.apply(this, arguments);
-      }
-
-      let loader = loaderForModel(this.target, this.foreignKey, this.identifierField, options);
-      return loader.load(instance.get(this.sourceKey)).then(rejectOnEmpty.bind(null, options));
-    };
-  });
-}
-
-function shimHasMany(target) {
-  if (target.get.__wrapped) return;
-
-  shimmer.wrap(target, 'get', original => {
-    return function bathedGetHasMany(instances, options = {}) {
-      let isCount = false;
-      if (options.include || options.transaction) {
-        return original.apply(this, arguments);
-      }
-
-      const attributes = options.attributes;
-      if (attributes && attributes.length === 1 && attributes[0][0].fn && attributes[0][0].fn === 'COUNT' && !options.group) {
-        // Phew, what an if statement - It avoids duplicating the count code from sequelize,
-        // at the expense of slightly tighter coupling to the sequelize implementation
-        options.attributes.push(this.foreignKey);
-        options.multiple = false;
-        options.group = [this.foreignKey];
-        delete options.plain;
-        isCount = true;
-      }
-
-      if (this.scope) {
-        options.where = {
-          $and: [
-            options.where,
-            this.scope
-          ]
-        };
-      }
-
-      let loader = loaderForModel(this.target, this.foreignKey, this.foreignKeyField, {
-        multiple: true,
-        ...options
-      });
-
-      if (Array.isArray(instances)) {
-        return Promise.map(instances, instance => loader.load(instance.get(this.source.primaryKeyAttribute)));
-      } else {
-        return loader.load(instances.get(this.source.primaryKeyAttribute)).then(result => {
-          if (isCount && !result) {
-            result = { count: 0 };
-          }
-          return result;
-        }).then(rejectOnEmpty.bind(null, options));
-      }
-    };
-  });
-}
-
-function shimBelongsToMany(target) {
-  if (target.get.__wrapped) return;
-
-  shimmer.wrap(target, 'get', original => {
-    return function bathedGetHasMany(instances, options = {}) {
-      let isCount = false;
-      assert(this.paired, '.paired missing on belongsToMany association. You need to set up both sides of the association');
-
-      if (options.include || options.transaction) {
-        return original.apply(this, arguments);
-      }
-
-      const attributes = options.attributes;
-      if (attributes && attributes.length === 1 && attributes[0][0].fn && attributes[0][0].fn === 'COUNT' && !options.group) {
-        // Phew, what an if statement - It avoids duplicating the count code from sequelize,
-        // at the expense of slightly tighter coupling to the sequelize implementation
-        options.multiple = false;
-        options.group = [`${this.paired.manyFromSource.as}.${this.identifierField}`];
-        delete options.plain;
-        isCount = true;
-      }
-
-      if (this.scope) {
-        options.where = {
-          $and: [
-            options.where,
-            this.scope
-          ]
-        };
-      }
-
-      options.through = options.through || {};
-      if (this.through.scope) {
-        options.through.where = {
-          $and: [
-            options.through.where,
-            this.through.scope
-          ]
-        };
-      }
-
-      let loader = loaderForBTM(this.target, this.paired.manyFromSource.as, this.foreignKey, this.identifierField, {
-        association: this.paired,
-        multiple: true,
-        ...options
-      });
-
-      if (Array.isArray(instances)) {
-        return Promise.map(instances, instance => loader.load(instance.get(this.source.primaryKeyAttribute)));
-      } else {
-        return loader.load(instances.get(this.source.primaryKeyAttribute)).then(result => {
-          if (isCount && !result) {
-            result = { count: 0 };
-          }
-          return result;
-        }).then(rejectOnEmpty.bind(null, options));
-      }
-    };
-  });
-}
-
-function shimAssociation(association) {
-  switch (association.associationType) {
-    case 'BelongsTo': return shimBelongsTo(association);
-    case 'HasOne': return shimHasOne(association);
-    case 'HasMany': return shimHasMany(association);
-    case 'BelongsToMany': return shimBelongsToMany(association);
-  }
 }
 
 let cache;

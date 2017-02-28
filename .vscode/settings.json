@@ -1,8 +1,23 @@
 {
   "vsicons.presets.angular": false,
   "files.exclude": {
-    "node_modules": "explorerExcludedFiles",
+    "logs": "explorerExcludedFiles",
+    "*.log": "explorerExcludedFiles",
+    "npm-debug.log*": "explorerExcludedFiles",
+    "pids": "explorerExcludedFiles",
+    "*.pid": "explorerExcludedFiles",
+    "*.seed": "explorerExcludedFiles",
+    "lib-cov": "explorerExcludedFiles",
     ".history": "explorerExcludedFiles",
-    ".DS_Store": "explorerExcludedFiles"
+    ".DS_Store": "explorerExcludedFiles",
+    "coverage": "explorerExcludedFiles",
+    ".nyc_output": "explorerExcludedFiles",
+    ".grunt": "explorerExcludedFiles",
+    ".lock-wscript": "explorerExcludedFiles",
+    "build/Release": "explorerExcludedFiles",
+    "node_modules": "explorerExcludedFiles",
+    "jspm_packages": "explorerExcludedFiles",
+    ".npm": "explorerExcludedFiles",
+    ".node_repl_history": "explorerExcludedFiles"
   }
 }
