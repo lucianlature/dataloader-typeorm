@@ -8,16 +8,17 @@ import expect from 'unexpected';
 let connection;
 
 describe('findById', function () {
-  beforeEach(function () {
+  beforeEach(async function () {
     this.sandbox = sinon.sandbox.create();
+    connection = await createConnection();
   });
   afterEach(function () {
     this.sandbox.restore();
+    connection.close();
   });
 
   describe('id primary key', function () {
     beforeEach(async function () {
-      connection = await createConnection();
       this.userRepository = connection.getRepository(User);
       const newUser = new User();
       newUser.id = randint();
@@ -26,7 +27,7 @@ describe('findById', function () {
       dataloaderTypeorm(this.userRepository);
       this.User = await this.userRepository.persist(newUser);
 
-      this.users = await this.userRepository.create([
+      this.users = await this.userRepository.persist([
         { id: randint() },
         { id: randint() },
         { id: randint() }
@@ -39,19 +40,21 @@ describe('findById', function () {
       expect(this.userRepository.find, 'was not called');
     });
 
-    xit('batches to a single findAll call', async function () {
-      let user1 = this.User.findOneById(this.users[2].get('id'))
-        , user2 = this.User.findOneById(this.users[1].get('id'));
+    it('batches to a single `find` call', async function () {
+      let user1 = await this.userRepository.findOneById(this.users[2].id);
+      let user2 = await this.userRepository.findOneById(this.users[1].id);
 
-      await expect(user1, 'to be fulfilled with', this.users[2]);
-      await expect(user2, 'to be fulfilled with', this.users[1]);
-
-      expect(this.User.findAll, 'was called once');
-      expect(this.User.findAll, 'to have a call satisfying', [{
+      expect(user1.id, 'to equal', this.users[2].id);
+      expect(user2.id, 'to equal', this.users[1].id);
+      
+      /*
+      expect(this.userRepository.find, 'was called once');
+      expect(this.userRepository.find, 'to have a call satisfying', [{
         where: {
           id: [this.users[2].get('id'), this.users[1].get('id')]
         }
       }]);
+      */
     });
 
     xit('supports rejectOnEmpty', async function () {

@@ -1,6 +1,6 @@
 import typeorm from 'typeorm';
 import DataLoader from 'dataloader';
-import {groupBy, property, isEmpty} from 'ramda';
+import {groupBy, prop, isEmpty} from 'ramda';
 import {getCacheKey, mergeWhere} from './utils';
 import shimmer from 'shimmer';
 import LRU from 'lru-cache';
@@ -27,7 +27,7 @@ function mapResult(attribute, keys, options, result) {
       // Belongs to many count is a raw query, so we have to get the attribute directly
       attribute = attribute.join('.');
     }
-    result = groupBy(result, property(attribute));
+    result = groupBy(prop(attribute), result);
   }
 
   return keys.map(key => {
@@ -54,18 +54,15 @@ function rejectOnEmpty(options, result) {
   return result;
 }
 
-function loaderForModel(model, attribute, attributeField, options = {}) {
-  if (typeof options.include === 'undefined') {
-    console.warn('options.include is not supported by model loader');
-  }
-
-  let cacheKey = getCacheKey(model, attribute, options);
+function loaderForModel(repo, attribute, options = {}) {
+  let cacheKey = getCacheKey(repo, attribute, options);
 
   if (!cache.has(cacheKey)) {
-    cache.set(cacheKey, new DataLoader(keys => {
+    cache.set(cacheKey, new DataLoader(async keys => {
       const findOptions = Object.assign({}, options);
       delete findOptions.rejectOnEmpty;
 
+      /*
       if (findOptions.limit && keys.length > 1) {
         findOptions.groupedLimit = {
           limit: findOptions.limit,
@@ -73,13 +70,14 @@ function loaderForModel(model, attribute, attributeField, options = {}) {
           values: keys
         };
         delete findOptions.limit;
-      } else {
-        findOptions.where = mergeWhere({
-          [attributeField]: keys
-        }, findOptions.where);
-      }
+      } else {*/
+      findOptions.where = mergeWhere({
+        [attribute]: keys
+      }, findOptions.where);
+      /* } */
 
-      return model.findAll(findOptions).then(mapResult.bind(null, attribute, keys, findOptions));
+      const results = await repo.find(findOptions.where);
+      return mapResult(attribute, keys, findOptions, results);
     }, {
       cache: false
     }));
@@ -99,7 +97,9 @@ function shimModel(target) {
       if (options.transaction || options.include) {
         return original.apply(this, arguments);
       }
-      return loaderForModel(this, this.primaryKeyAttribute, this.primaryKeyField).load(id).then(rejectOnEmpty.bind(null, options));
+
+      const targetAttributes = this.metadata.columns.map((columnMeta) => columnMeta.propertyName) || [];
+      return loaderForModel(this, targetAttributes[0]).load(id).then(rejectOnEmpty.bind(null, options));
     };
   });
 }
