@@ -2,6 +2,7 @@
   "vsicons.presets.angular": false,
   "files.exclude": {
     "node_modules": "explorerExcludedFiles",
-    ".history": "explorerExcludedFiles"
+    ".history": "explorerExcludedFiles",
+    ".DS_Store": "explorerExcludedFiles"
   }
 }
