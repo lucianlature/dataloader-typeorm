@@ -10,7 +10,7 @@ beforeEach(resetCache);
 export const createConnection = () => {
   const {TYPE, DB_HOST, DB_USER, DB_PASSWORD, DB_DATABASE} = process.env;
   const driverOptions = {
-    type: TYPE,
+    type: TYPE || 'postgres',
     port: 5432,
     host: DB_HOST,
     username: DB_USER,
