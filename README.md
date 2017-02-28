@@ -1,4 +1,6 @@
 # dataloader-typeorm
+
+[![Greenkeeper badge](https://badges.greenkeeper.io/lucianlature/dataloader-typeorm.svg)](https://greenkeeper.io/)
 Batching and simplification of TypeORM with facebook/dataloader
 
 [![Build Status](https://circleci.com/gh/lucianlature/dataloader-typeorm.svg)](https://circleci.com/gh/lucianlature/dataloader-typeorm)
