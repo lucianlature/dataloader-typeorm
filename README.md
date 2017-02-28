@@ -5,8 +5,34 @@ Batching and simplification of TypeORM with facebook/dataloader
 [![Coverage](https://codecov.io/gh/lucianlature/dataloader-typeorm/branch/master/graph/badge.svg)](https://codecov.io/gh/lucianlature/dataloader-typeorm)
 
 ## What it does
+model/User.js
 ```js
-const User = sequelize.define('user');
+export default class {
+  constructor(id) {
+    this.id = id;
+  }
+}
+```
+
+entity/UserSchema.js
+```js
+import User from '../model/User';
+
+export default {
+  target: User,
+  columns: {
+    id: {
+      primary: true,
+      type: 'int',
+      generated: false
+    }
+  }
+};
+```
+
+```js
+const connection = await createConnection();
+const userRepo = connection.getRepository(User);
 ```
 
 Suppose you search for two users simultaneously (technically, within the same tick):
@@ -77,7 +103,7 @@ let userType = new GraphQLObjectType({
 ```
 
 A query for `task { user {name } }` will first load all tasks, and then make a call to `task.getUser()` for each task.
-With the help of `dataloader-sequelize`, these calls will be merged into a single call to `User.findAll`.
+With the help of `dataloader-typeorm`, these calls will be merged into a single call to `User.findAll`.
 
 ## How it works
 
