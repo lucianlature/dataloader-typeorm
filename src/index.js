@@ -58,7 +58,7 @@ function loaderForModel(repo, attribute, options = {}) {
   let cacheKey = getCacheKey(repo, attribute, options);
 
   if (!cache.has(cacheKey)) {
-    cache.set(cacheKey, new DataLoader(async keys => {
+    cache.set(cacheKey, new DataLoader(keys => {
       const findOptions = Object.assign({}, options);
       delete findOptions.rejectOnEmpty;
 
@@ -76,8 +76,11 @@ function loaderForModel(repo, attribute, options = {}) {
       }, findOptions.where);
       /* } */
 
-      const results = await repo.find(findOptions.where);
-      return mapResult(attribute, keys, findOptions, results);
+      return repo
+        .createQueryBuilder('user')
+        .where("user.id IN (:ids)", {ids: findOptions.where.id})
+        .getMany()
+        .then(mapResult.bind(null, attribute, keys, findOptions));
     }, {
       cache: false
     }));
@@ -86,11 +89,11 @@ function loaderForModel(repo, attribute, options = {}) {
   return cache.get(cacheKey);
 }
 
-function shimModel(target) {
+function shimRepo(target) {
   if (target.findOneById.__wrapped) return;
 
   shimmer.massWrap(target, ['findOne', 'findOneById'], original => {
-    return function batchedFindById(id, options = {}) {
+    return function batchedFindOneById(id, options = {}) {
       if ([null, undefined].indexOf(id) !== -1) {
         return Promise.resolve(null);
       }
@@ -130,7 +133,7 @@ export default function (target, options = {}) {
   } else {
   */
   // Assume target is  constructor
-  shimModel(target);
+  shimRepo(target);
   // shimBelongsTo(target.Association.BelongsTo.prototype);
   // shimHasOne(target.Association.HasOne.prototype);
   // shimHasMany(target.Association.HasMany.prototype);

@@ -22,10 +22,9 @@ export const stringifyObject = (object, keys = Object.keys(object)) => {
   return keys.sort().map(key => `${key}:${stringifyValue(object[key], key)}`).join('|');
 };
 
-export const getCacheKey = (model, attribute, options) => {
+export const getCacheKey = (repo, attribute, options) => {
   options = stringifyObject(options, ['association', 'attributes', 'groupedLimit', 'limit', 'offset', 'order', 'where', 'through', 'raw']);
-
-  return `${model.name}|${attribute}|${options}`;
+  return `${repo.metadata.discriminatorValue}|${attribute}|${options}`;
 };
 
 export const mergeWhere = (where, optionsWhere) => {
